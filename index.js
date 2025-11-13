@@ -1,46 +1,47 @@
 console.log("[SkinMonitor] Plugin loaded");
 
 const LOG_PREFIX = "[SkinMonitor]";
+const SKIN_SELECTORS = [
+    ".skin-name-text", // Classic Champ Select
+    ".skin-name",       // Swiftplay lobby
+];
+const POLL_INTERVAL_MS = 250;
 const BRIDGE_URL = "ws://localhost:3000";
-const SKIN_REQUEST_REGEX = /\/lol-store\/v1\/skins\/(\d+)/i;
 
+let lastLoggedSkin = null;
+let pollTimer = null;
+let observer = null;
 let bridgeSocket = null;
 let bridgeReady = false;
 let bridgeQueue = [];
-let interceptorsInstalled = false;
-let lastReportedSkinId = null;
 
-function logSkinSelection(skinId) {
-    console.log(`${LOG_PREFIX} Detected skin ID: ${skinId}`);
-    notifyBridge({ skinId, timestamp: Date.now() });
+function logHover(skinName) {
+    console.log(`${LOG_PREFIX} Hovered skin: ${skinName}`);
+    notifyBridge(skinName);
 }
 
-function notifyBridge(payload) {
-    try {
-        const message = JSON.stringify(payload);
-        sendToBridge(message);
-    } catch (error) {
-        console.warn(`${LOG_PREFIX} Failed to encode payload`, error);
-    }
+function notifyBridge(skinName) {
+    const payload = JSON.stringify({ skin: skinName, timestamp: Date.now() });
+    sendToBridge(payload);
 }
 
-function sendToBridge(message) {
+function sendToBridge(payload) {
     if (!bridgeSocket || bridgeSocket.readyState === WebSocket.CLOSING || bridgeSocket.readyState === WebSocket.CLOSED) {
-        bridgeQueue.push(message);
+        bridgeQueue.push(payload);
         setupBridgeSocket();
         return;
     }
 
     if (bridgeSocket.readyState === WebSocket.CONNECTING) {
-        bridgeQueue.push(message);
+        bridgeQueue.push(payload);
         return;
     }
 
     try {
-        bridgeSocket.send(message);
+        bridgeSocket.send(payload);
     } catch (error) {
         console.warn(`${LOG_PREFIX} Bridge send failed`, error);
-        bridgeQueue.push(message);
+        bridgeQueue.push(payload);
         resetBridgeSocket();
     }
 }
@@ -85,12 +86,12 @@ function flushBridgeQueue() {
     }
 
     while (bridgeQueue.length) {
-        const message = bridgeQueue.shift();
+        const payload = bridgeQueue.shift();
         try {
-            bridgeSocket.send(message);
+            bridgeSocket.send(payload);
         } catch (error) {
             console.warn(`${LOG_PREFIX} Bridge flush failed`, error);
-            bridgeQueue.unshift(message);
+            bridgeQueue.unshift(payload);
             resetBridgeSocket();
             break;
         }
@@ -119,73 +120,101 @@ function resetBridgeSocket() {
     scheduleBridgeRetry();
 }
 
-function extractSkinIdFromUrl(url) {
-    if (!url || typeof url !== "string") {
-        return null;
+function isVisible(element) {
+    if (typeof element.offsetParent === "undefined") {
+        return true;
     }
-
-    const match = SKIN_REQUEST_REGEX.exec(url);
-    if (!match) {
-        return null;
-    }
-
-    const skinId = parseInt(match[1], 10);
-    if (!Number.isFinite(skinId)) {
-        return null;
-    }
-
-    return skinId;
+    return element.offsetParent !== null;
 }
 
-function handlePotentialSkinRequest(url) {
-    const skinId = extractSkinIdFromUrl(url);
-    if (!skinId || skinId === lastReportedSkinId) {
+function readCurrentSkin() {
+    for (const selector of SKIN_SELECTORS) {
+        const nodes = document.querySelectorAll(selector);
+        if (!nodes.length) {
+            continue;
+        }
+
+        let candidate = null;
+
+        nodes.forEach((node) => {
+            const name = node.textContent.trim();
+            if (!name) {
+                return;
+            }
+
+            if (isVisible(node)) {
+                candidate = name;
+            } else if (!candidate) {
+                candidate = name;
+            }
+        });
+
+        if (candidate) {
+            return candidate;
+        }
+    }
+
+    return null;
+}
+
+function reportSkinIfChanged() {
+    const name = readCurrentSkin();
+    if (!name || name === lastLoggedSkin) {
         return;
     }
 
-    lastReportedSkinId = skinId;
-    logSkinSelection(skinId);
+    lastLoggedSkin = name;
+    logHover(name);
 }
 
-function installInterceptors() {
-    if (interceptorsInstalled) {
-        return;
-    }
-    interceptorsInstalled = true;
-
-    if (typeof window.fetch === "function") {
-        const originalFetch = window.fetch;
-        window.fetch = function patchedFetch(...args) {
-            try {
-                const request = args[0];
-                const url = typeof request === "string" ? request : request && request.url;
-                handlePotentialSkinRequest(url);
-            } catch (error) {
-                console.warn(`${LOG_PREFIX} Failed to inspect fetch request`, error);
-            }
-            return originalFetch.apply(this, args);
-        };
+function attachObservers() {
+    if (observer) {
+        observer.disconnect();
     }
 
-    if (typeof window.XMLHttpRequest === "function") {
-        const originalOpen = window.XMLHttpRequest.prototype.open;
-        window.XMLHttpRequest.prototype.open = function patchedOpen(method, url, ...rest) {
-            try {
-                handlePotentialSkinRequest(url);
-            } catch (error) {
-                console.warn(`${LOG_PREFIX} Failed to inspect XHR request`, error);
-            }
-            return originalOpen.call(this, method, url, ...rest);
-        };
+    observer = new MutationObserver(reportSkinIfChanged);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    document.querySelectorAll("*").forEach((node) => {
+        if (!node.shadowRoot || !(node.shadowRoot instanceof Node)) {
+            return;
+        }
+
+        try {
+            observer.observe(node.shadowRoot, { childList: true, subtree: true });
+        } catch (error) {
+            console.warn(`${LOG_PREFIX} Cannot observe shadowRoot`, error);
+        }
+    });
+
+    if (!pollTimer) {
+        pollTimer = setInterval(reportSkinIfChanged, POLL_INTERVAL_MS);
     }
 }
 
 function start() {
+    if (!document.body) {
+        console.log(`${LOG_PREFIX} Waiting for document.body...`);
+        setTimeout(start, 250);
+        return;
+    }
+
     setupBridgeSocket();
-    installInterceptors();
+    attachObservers();
+    reportSkinIfChanged();
 }
 
 function stop() {
+    if (observer) {
+        observer.disconnect();
+        observer = null;
+    }
+
+    if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+
     if (bridgeSocket) {
         bridgeSocket.close();
         bridgeSocket = null;

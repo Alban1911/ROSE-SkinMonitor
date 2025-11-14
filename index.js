@@ -1,9 +1,10 @@
 console.log("[SkinMonitor] Plugin loaded");
 
 const LOG_PREFIX = "[SkinMonitor]";
+const STATE_EVENT = "lu-skin-monitor-state";
 const SKIN_SELECTORS = [
     ".skin-name-text", // Classic Champ Select
-    ".skin-name",       // Swiftplay lobby
+    ".skin-name", // Swiftplay lobby
 ];
 const POLL_INTERVAL_MS = 250;
 const BRIDGE_URL = "ws://localhost:3000";
@@ -14,15 +15,42 @@ let observer = null;
 let bridgeSocket = null;
 let bridgeReady = false;
 let bridgeQueue = [];
+let bridgeErrorLogged = false;
+let bridgeSetupWarned = false;
+
+function publishSkinState(payload) {
+    const detail = {
+        name: payload?.skinName || null,
+        skinId: Number.isFinite(payload?.skinId) ? payload.skinId : null,
+        championId: Number.isFinite(payload?.championId) ? payload.championId : null,
+        hasChromas: Boolean(payload?.hasChromas),
+        updatedAt: Date.now(),
+    };
+    window.__leagueUnlockedSkinState = detail;
+    try {
+        window.__leagueUnlockedCurrentSkin = detail.name;
+    } catch {
+        // ignore
+    }
+    window.dispatchEvent(new CustomEvent(STATE_EVENT, { detail }));
+}
 
 function logHover(skinName) {
     console.log(`${LOG_PREFIX} Hovered skin: ${skinName}`);
-    notifyBridge(skinName);
+    sendBridgePayload({ skin: skinName, timestamp: Date.now() });
 }
 
-function notifyBridge(skinName) {
-    const payload = JSON.stringify({ skin: skinName, timestamp: Date.now() });
-    sendToBridge(payload);
+function sendBridgePayload(obj) {
+    try {
+        const payload = JSON.stringify(obj);
+        sendToBridge(payload);
+    } catch (error) {
+        console.warn(`${LOG_PREFIX} Failed to serialize bridge payload`, error);
+    }
+}
+
+if (typeof window !== "undefined") {
+    window.__leagueUnlockedBridgeEmit = sendBridgePayload;
 }
 
 function sendToBridge(payload) {
@@ -54,7 +82,10 @@ function setupBridgeSocket() {
     try {
         bridgeSocket = new WebSocket(BRIDGE_URL);
     } catch (error) {
-        console.warn(`${LOG_PREFIX} Bridge socket setup failed`, error);
+        if (!bridgeSetupWarned) {
+            console.warn(`${LOG_PREFIX} Bridge socket setup failed`, error);
+            bridgeSetupWarned = true;
+        }
         scheduleBridgeRetry();
         return;
     }
@@ -62,9 +93,25 @@ function setupBridgeSocket() {
     bridgeSocket.addEventListener("open", () => {
         bridgeReady = true;
         flushBridgeQueue();
+        bridgeErrorLogged = false;
+        bridgeSetupWarned = false;
+        window.__leagueUnlockedBridgeEmit = sendBridgePayload;
     });
 
     bridgeSocket.addEventListener("message", (event) => {
+        let data = null;
+        try {
+            data = JSON.parse(event.data);
+        } catch (error) {
+            console.log(`${LOG_PREFIX} Bridge message: ${event.data}`);
+            return;
+        }
+
+        if (data && data.type === "skin-state") {
+            publishSkinState(data);
+            return;
+        }
+
         console.log(`${LOG_PREFIX} Bridge message: ${event.data}`);
     });
 
@@ -74,7 +121,10 @@ function setupBridgeSocket() {
     });
 
     bridgeSocket.addEventListener("error", (error) => {
-        console.warn(`${LOG_PREFIX} Bridge socket error`, error);
+        if (!bridgeErrorLogged) {
+            console.warn(`${LOG_PREFIX} Bridge socket error`, error);
+            bridgeErrorLogged = true;
+        }
         bridgeReady = false;
         scheduleBridgeRetry();
     });

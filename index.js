@@ -1,3 +1,10 @@
+/**
+ * @name Rose-SkinMonitor
+ * @author Rose Team
+ * @description Skin monitor for Pengu Loader
+ * @link https://github.com/Alban1911/Rose-SkinMonitor
+ */
+
 console.log("[SkinMonitor] Plugin loaded");
 
 const LOG_PREFIX = "[SkinMonitor]";

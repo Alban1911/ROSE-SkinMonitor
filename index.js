@@ -14,7 +14,36 @@ const SKIN_SELECTORS = [
   ".skin-name", // Swiftplay lobby
 ];
 const POLL_INTERVAL_MS = 250;
-const BRIDGE_URL = "ws://localhost:3000";
+let BRIDGE_PORT = 3000; // Default, will be updated from /port endpoint
+let BRIDGE_URL = `ws://localhost:${BRIDGE_PORT}`;
+
+// Load bridge port from /port endpoint
+async function loadBridgePort() {
+  try {
+    for (let port = 3000; port <= 3010; port++) {
+      try {
+        const response = await fetch(`http://localhost:${port}/port`);
+        if (response.ok) {
+          const portText = await response.text();
+          const fetchedPort = parseInt(portText.trim(), 10);
+          if (!isNaN(fetchedPort) && fetchedPort > 0) {
+            BRIDGE_PORT = fetchedPort;
+            BRIDGE_URL = `ws://localhost:${BRIDGE_PORT}`;
+            console.log(`${LOG_PREFIX} Loaded bridge port: ${BRIDGE_PORT}`);
+            return true;
+          }
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    console.warn(`${LOG_PREFIX} Failed to load bridge port, using default (3000)`);
+    return false;
+  } catch (e) {
+    console.warn(`${LOG_PREFIX} Error loading bridge port:`, e);
+    return false;
+  }
+}
 
 let lastLoggedSkin = null;
 let pollTimer = null;
@@ -266,12 +295,15 @@ function attachObservers() {
   }
 }
 
-function start() {
+async function start() {
   if (!document.body) {
     console.log(`${LOG_PREFIX} Waiting for document.body...`);
     setTimeout(start, 250);
     return;
   }
+
+  // Load bridge port before initializing socket
+  await loadBridgePort();
 
   setupBridgeSocket();
   attachObservers();

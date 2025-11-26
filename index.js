@@ -227,6 +227,7 @@ function setupBridgeSocket() {
     if (data && data.type === "phase-change" && data.phase === "Lobby") {
       lastLoggedSkin = null;
       console.log(`${LOG_PREFIX} Reset skin state for new game (Lobby phase)`);
+      window.dispatchEvent(new CustomEvent("rose-custom-wheel-reset"));
       return;
     }
 

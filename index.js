@@ -224,6 +224,13 @@ function setupBridgeSocket() {
     }
 
     // Reset skin state when entering Lobby phase (so same skin in next game triggers detection)
+    if (data && data.type === "champion-locked") {
+      window.dispatchEvent(
+        new CustomEvent("rose-custom-wheel-champion-locked", { detail: data })
+      );
+      return;
+    }
+
     if (data && data.type === "phase-change" && data.phase === "Lobby") {
       lastLoggedSkin = null;
       console.log(`${LOG_PREFIX} Reset skin state for new game (Lobby phase)`);

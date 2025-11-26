@@ -216,6 +216,13 @@ function setupBridgeSocket() {
       return;
     }
 
+    if (data && data.type === "skin-mods-response") {
+      window.dispatchEvent(
+        new CustomEvent("rose-custom-wheel-skin-mods", { detail: data })
+      );
+      return;
+    }
+
     // Reset skin state when entering Lobby phase (so same skin in next game triggers detection)
     if (data && data.type === "phase-change" && data.phase === "Lobby") {
       lastLoggedSkin = null;

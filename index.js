@@ -223,6 +223,27 @@ function setupBridgeSocket() {
       return;
     }
 
+    if (data && data.type === "maps-response") {
+      window.dispatchEvent(
+        new CustomEvent("rose-custom-wheel-maps", { detail: data })
+      );
+      return;
+    }
+
+    if (data && data.type === "fonts-response") {
+      window.dispatchEvent(
+        new CustomEvent("rose-custom-wheel-fonts", { detail: data })
+      );
+      return;
+    }
+
+    if (data && data.type === "announcers-response") {
+      window.dispatchEvent(
+        new CustomEvent("rose-custom-wheel-announcers", { detail: data })
+      );
+      return;
+    }
+
     // Reset skin state when entering Lobby phase (so same skin in next game triggers detection)
     if (data && data.type === "champion-locked") {
       window.dispatchEvent(

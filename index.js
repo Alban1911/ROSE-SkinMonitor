@@ -244,6 +244,13 @@ function setupBridgeSocket() {
       return;
     }
 
+    if (data && data.type === "others-response") {
+      window.dispatchEvent(
+        new CustomEvent("rose-custom-wheel-others", { detail: data })
+      );
+      return;
+    }
+
     // Reset skin state when entering Lobby phase (so same skin in next game triggers detection)
     if (data && data.type === "champion-locked") {
       window.dispatchEvent(

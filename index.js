@@ -1,5 +1,5 @@
 /**
- * @name Rose-SkinMonitor
+ * @name ROSE-SkinMonitor
  * @author Rose Team
  * @description Skin monitor for Pengu Loader
  * @link https://github.com/Alban1911/Rose-SkinMonitor

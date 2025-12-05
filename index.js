@@ -49,7 +49,7 @@ async function loadBridgePort() {
         }
       }
     }
-    
+
     // OPTIMIZATION: Try default port 50000 FIRST before scanning all ports
     try {
       const response = await fetch(`http://localhost:50000/bridge-port`, {
@@ -69,7 +69,7 @@ async function loadBridgePort() {
     } catch (e) {
       // Port 50000 not ready, continue to discovery
     }
-    
+
     // OPTIMIZATION: Parallel port discovery instead of sequential
     // Try all ports at once, return as soon as one succeeds
     const portPromises = [];
@@ -78,22 +78,22 @@ async function loadBridgePort() {
         fetch(`http://localhost:${port}/bridge-port`, {
           signal: AbortSignal.timeout(300)
         })
-        .then(response => {
-          if (response.ok) {
-            return response.text().then(portText => {
-              const fetchedPort = parseInt(portText.trim(), 10);
-              if (!isNaN(fetchedPort) && fetchedPort > 0) {
-                return { port: fetchedPort, sourcePort: port };
-              }
-              return null;
-            });
-          }
-          return null;
-        })
-        .catch(() => null)
+          .then(response => {
+            if (response.ok) {
+              return response.text().then(portText => {
+                const fetchedPort = parseInt(portText.trim(), 10);
+                if (!isNaN(fetchedPort) && fetchedPort > 0) {
+                  return { port: fetchedPort, sourcePort: port };
+                }
+                return null;
+              });
+            }
+            return null;
+          })
+          .catch(() => null)
       );
     }
-    
+
     // Wait for first successful response
     const results = await Promise.allSettled(portPromises);
     for (const result of results) {
@@ -105,7 +105,7 @@ async function loadBridgePort() {
         return true;
       }
     }
-    
+
     // Fallback: try old /port endpoint (parallel as well)
     const legacyPromises = [];
     for (let port = DISCOVERY_START_PORT; port <= DISCOVERY_END_PORT; port++) {
@@ -113,22 +113,22 @@ async function loadBridgePort() {
         fetch(`http://localhost:${port}/port`, {
           signal: AbortSignal.timeout(300)
         })
-        .then(response => {
-          if (response.ok) {
-            return response.text().then(portText => {
-              const fetchedPort = parseInt(portText.trim(), 10);
-              if (!isNaN(fetchedPort) && fetchedPort > 0) {
-                return { port: fetchedPort, sourcePort: port };
-              }
-              return null;
-            });
-          }
-          return null;
-        })
-        .catch(() => null)
+          .then(response => {
+            if (response.ok) {
+              return response.text().then(portText => {
+                const fetchedPort = parseInt(portText.trim(), 10);
+                if (!isNaN(fetchedPort) && fetchedPort > 0) {
+                  return { port: fetchedPort, sourcePort: port };
+                }
+                return null;
+              });
+            }
+            return null;
+          })
+          .catch(() => null)
       );
     }
-    
+
     const legacyResults = await Promise.allSettled(legacyPromises);
     for (const result of legacyResults) {
       if (result.status === 'fulfilled' && result.value) {
@@ -139,7 +139,7 @@ async function loadBridgePort() {
         return true;
       }
     }
-    
+
     console.warn(`${LOG_PREFIX} Failed to load bridge port, using default (50000)`);
     return false;
   } catch (e) {
@@ -158,8 +158,11 @@ let bridgeErrorLogged = false;
 let bridgeSetupWarned = false;
 
 function publishSkinState(payload) {
+  // Use payload name, fallback to lastLoggedSkin if available (improves reliability if backend doesn't echo name)
+  const name = payload?.skinName || lastLoggedSkin || null;
+
   const detail = {
-    name: payload?.skinName || null,
+    name: name,
     skinId: Number.isFinite(payload?.skinId) ? payload.skinId : null,
     championId: Number.isFinite(payload?.championId)
       ? payload.championId
@@ -170,6 +173,8 @@ function publishSkinState(payload) {
   window.__roseSkinState = detail;
   try {
     window.__roseCurrentSkin = detail.name;
+    // Update lastLoggedSkin to match ensuring consistency if payload brought a new name
+    if (name) lastLoggedSkin = name;
   } catch {
     // ignore
   }
@@ -177,8 +182,16 @@ function publishSkinState(payload) {
 }
 
 function logHover(skinName) {
-  console.log(`${LOG_PREFIX} Hovered skin: ${skinName}`);
-  sendBridgePayload({ skin: skinName, timestamp: Date.now() });
+  // Sanitize skin name: remove anything in parentheses (chroma names)
+  // e.g. "Talon à l'épée tenace (œil-de-chat)" -> "Talon à l'épée tenace"
+  const cleanName = skinName.replace(/\s*\(.*?\)\s*/g, "").trim();
+
+  if (cleanName !== skinName) {
+    console.log(`${LOG_PREFIX} Sanitized skin name: '${skinName}' -> '${cleanName}'`);
+  }
+
+  console.log(`${LOG_PREFIX} Hovered skin: ${cleanName}`);
+  sendBridgePayload({ skin: cleanName, originalName: skinName, timestamp: Date.now() });
 }
 
 function sendBridgePayload(obj) {

@@ -30,7 +30,7 @@ async function loadBridgePort() {
         // Verify cached port is still valid with shorter timeout
         try {
           const response = await fetch(`http://127.0.0.1:${port}/bridge-port`, {
-            signal: AbortSignal.timeout(200)
+            signal: AbortSignal.timeout(50)
           });
           if (response.ok) {
             const portText = await response.text();
@@ -52,7 +52,7 @@ async function loadBridgePort() {
     // OPTIMIZATION: Try default port 50000 FIRST before scanning all ports
     try {
       const response = await fetch(`http://127.0.0.1:50000/bridge-port`, {
-        signal: AbortSignal.timeout(200)
+        signal: AbortSignal.timeout(50)
       });
       if (response.ok) {
         const portText = await response.text();
@@ -72,7 +72,7 @@ async function loadBridgePort() {
     // OPTIMIZATION: Try fallback port 50001 SECOND
     try {
       const response = await fetch(`http://127.0.0.1:50001/bridge-port`, {
-        signal: AbortSignal.timeout(200)
+        signal: AbortSignal.timeout(50)
       });
       if (response.ok) {
         const portText = await response.text();
@@ -95,7 +95,7 @@ async function loadBridgePort() {
     for (let port = DISCOVERY_START_PORT; port <= DISCOVERY_END_PORT; port++) {
       portPromises.push(
         fetch(`http://127.0.0.1:${port}/bridge-port`, {
-          signal: AbortSignal.timeout(1000)
+          signal: AbortSignal.timeout(100)
         })
           .then(response => {
             if (response.ok) {
@@ -130,7 +130,7 @@ async function loadBridgePort() {
     for (let port = DISCOVERY_START_PORT; port <= DISCOVERY_END_PORT; port++) {
       legacyPromises.push(
         fetch(`http://127.0.0.1:${port}/port`, {
-          signal: AbortSignal.timeout(1000)
+          signal: AbortSignal.timeout(100)
         })
           .then(response => {
             if (response.ok) {

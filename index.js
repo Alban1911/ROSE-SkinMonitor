@@ -321,6 +321,13 @@ function setupBridgeSocket() {
       return;
     }
 
+    if (data && data.type === "category-mods-response") {
+      window.dispatchEvent(
+        new CustomEvent("rose-custom-wheel-category-mods", { detail: data })
+      );
+      return;
+    }
+
     if (data && data.type === "others-response") {
       window.dispatchEvent(
         new CustomEvent("rose-custom-wheel-others", { detail: data })

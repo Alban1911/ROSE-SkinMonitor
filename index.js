@@ -176,6 +176,29 @@ let bridgeQueue = [];
 let bridgeErrorLogged = false;
 let bridgeSetupWarned = false;
 
+function resyncSkinAfterConnect() {
+  try {
+    // On reconnect, backend may have missed the last hover (or hover happened before lock).
+    // Send a best-effort snapshot immediately so injection doesn't depend on a new hover.
+    const current = readCurrentSkin();
+    const name = current || lastLoggedSkin || null;
+    if (!name) return;
+
+    // Match logHover() sanitization (remove chroma parentheses)
+    const cleanName = String(name).replace(/\s*\(.*?\)\s*/g, "").trim();
+    if (!cleanName) return;
+
+    sendBridgePayload({
+      type: "skin-sync",
+      skin: cleanName,
+      originalName: name,
+      timestamp: Date.now(),
+    });
+  } catch {
+    // ignore
+  }
+}
+
 function publishSkinState(payload) {
   // Use payload name, fallback to lastLoggedSkin if available (improves reliability if backend doesn't echo name)
   const name = payload?.skinName || lastLoggedSkin || null;
@@ -274,6 +297,7 @@ function setupBridgeSocket() {
   bridgeSocket.addEventListener("open", () => {
     bridgeReady = true;
     flushBridgeQueue();
+    resyncSkinAfterConnect();
     bridgeErrorLogged = false;
     bridgeSetupWarned = false;
     window.__roseBridgeEmit = sendBridgePayload;

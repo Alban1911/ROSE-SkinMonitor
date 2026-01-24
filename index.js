@@ -176,6 +176,12 @@ let bridgeQueue = [];
 let bridgeErrorLogged = false;
 let bridgeSetupWarned = false;
 
+function sanitizeSkinName(name) {
+  // Keep the raw UI name intact.
+  // Any matching/normalization (including chroma suffix handling) should happen server-side.
+  return String(name || "").trim();
+}
+
 function resyncSkinAfterConnect() {
   try {
     // On reconnect, backend may have missed the last hover (or hover happened before lock).
@@ -184,8 +190,8 @@ function resyncSkinAfterConnect() {
     const name = current || lastLoggedSkin || null;
     if (!name) return;
 
-    // Match logHover() sanitization (remove chroma parentheses)
-    const cleanName = String(name).replace(/\s*\(.*?\)\s*/g, "").trim();
+    // Match logHover() sanitization
+    const cleanName = sanitizeSkinName(name);
     if (!cleanName) return;
 
     sendBridgePayload({
@@ -224,9 +230,8 @@ function publishSkinState(payload) {
 }
 
 function logHover(skinName) {
-  // Sanitize skin name: remove anything in parentheses (chroma names)
-  // e.g. "Talon à l'épée tenace (œil-de-chat)" -> "Talon à l'épée tenace"
-  const cleanName = skinName.replace(/\s*\(.*?\)\s*/g, "").trim();
+  // Sanitize skin name (currently: keep raw text, only trim).
+  const cleanName = sanitizeSkinName(skinName);
 
   if (cleanName !== skinName) {
     console.log(`${LOG_PREFIX} Sanitized skin name: '${skinName}' -> '${cleanName}'`);

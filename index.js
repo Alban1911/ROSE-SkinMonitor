@@ -509,6 +509,23 @@ function attachObservers() {
   }
 }
 
+function installFindMatchObserver() {
+  try {
+    const po = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        if (entry.name && entry.name.includes("sfx-lobby-button-find-match-hover")) {
+          console.log(`${LOG_PREFIX} Find-Match hover detected via PerformanceObserver`);
+          sendBridgePayload({ type: "find-match-hover", timestamp: Date.now() });
+        }
+      }
+    });
+    po.observe({ type: "resource", buffered: false });
+    console.log(`${LOG_PREFIX} Find-Match observer installed`);
+  } catch (e) {
+    console.warn(`${LOG_PREFIX} Failed to install Find-Match observer`, e);
+  }
+}
+
 async function start() {
   if (!document.body) {
     console.log(`${LOG_PREFIX} Waiting for document.body...`);
@@ -519,6 +536,7 @@ async function start() {
   // Load bridge port before initializing socket
   await loadBridgePort();
 
+  installFindMatchObserver();
   setupBridgeSocket();
   attachObservers();
   reportSkinIfChanged();
